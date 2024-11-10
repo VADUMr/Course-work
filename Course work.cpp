@@ -89,7 +89,7 @@ public:
         case SymmetricAlgorithm::BLOWFISH:
             return encryptBlowfish(plaintext);
         default:
-            throw runtime_error("Непідтримуваний алгоритм");
+            throw runtime_error("Unsupported algorithm");
         }
     }
 
@@ -102,7 +102,7 @@ public:
         case SymmetricAlgorithm::BLOWFISH:
             return decryptBlowfish(ciphertext);
         default:
-            throw runtime_error("Непідтримуваний алгоритм");
+            throw runtime_error("Unsupported algorithm");
         }
     }
 
@@ -121,7 +121,7 @@ public:
         case HashAlgorithm::SHA3_256:
             return calculateSHA3(data);
         default:
-            throw runtime_error("Непідтримуваний алгоритм хешування");
+            throw runtime_error("Unsupported algorithm");
         }
     }
 
