@@ -4,7 +4,6 @@
 #include <stdexcept>
 #include <memory>
 
-// Crypto++ включення
 #include <aes.h>
 #include <des.h>
 #include <blowfish.h>
@@ -25,20 +24,20 @@
 using namespace std;
 using namespace CryptoPP;
 
-// Перелічення для режимів роботи AES
+// Listing for AES operating modes
 enum class AESMode {
     CBC,
     CTR,
     GCM
 };
 
-// Перелічення для алгоритмів хешування
+// Enumeration for hashing algorithms
 enum class HashAlgorithm {
     SHA256,
     SHA3_256
 };
 
-// Перелічення для симетричних алгоритмів
+// Enumeration for symmetric algorithms
 enum class SymmetricAlgorithm {
     AES,
     DES,
@@ -47,32 +46,31 @@ enum class SymmetricAlgorithm {
 
 class Encryptor {
 public:
-    // Конструктор з розширеною ініціалізацією
     Encryptor() {
         AutoSeededRandomPool rng;
 
-        // Ініціалізація ключів для різних алгоритмів
+        // Initializing keys for different algorithms
         rng.GenerateBlock(aesKey, AES::DEFAULT_KEYLENGTH);
         rng.GenerateBlock(desKey, DES::DEFAULT_KEYLENGTH);
         rng.GenerateBlock(blowfishKey, BLOWFISH_DEFAULT_KEYLENGTH);
 
-        // Генерація IV для кожного алгоритму
+        // IV generation for each algorithm
         rng.GenerateBlock(aesIV, AES::BLOCKSIZE);
         rng.GenerateBlock(desIV, DES::BLOCKSIZE);
         rng.GenerateBlock(blowfishIV, Blowfish::BLOCKSIZE);
 
-        // Генерація додаткових IV для різних режимів AES
+        // Generation of additional IVs for different AES modes
         rng.GenerateBlock(aesCBCIV, AES::BLOCKSIZE);
         rng.GenerateBlock(aesCTRIV, AES::BLOCKSIZE);
         rng.GenerateBlock(aesGCMIV, AES::BLOCKSIZE);
 
-        // Генерація RSA ключів
+        // RSA key generation
         RSA::PrivateKey privateKey;
         privateKey.GenerateRandomWithKeySize(rng, 3072);
         rsaPublicKey = RSA::PublicKey(privateKey);
         rsaPrivateKey = privateKey;
 
-        // Генерація DSA ключів
+        // DSA key generation
         DSA::PrivateKey dsaPrivateKey;
         dsaPrivateKey.GenerateRandomWithKeySize(rng, 2048);
         this->dsaPrivateKey = dsaPrivateKey;
@@ -81,7 +79,7 @@ public:
         this->dsaPublicKey = dsaPublicKey;
     }
 
-    // Методи для симетричного шифрування
+    // Methods for symmetric encryption
     string encryptSymmetric(const string& plaintext, SymmetricAlgorithm algo, AESMode mode = AESMode::CBC) {
         switch (algo) {
         case SymmetricAlgorithm::AES:
@@ -136,20 +134,19 @@ public:
     }
 
 private:
-    // Константи для розмірів ключів
     static const int BLOWFISH_DEFAULT_KEYLENGTH = 32;
 
-    // Ключі для різних алгоритмів
+    // Keys for different algorithms
     byte aesKey[AES::DEFAULT_KEYLENGTH];
     byte desKey[DES::DEFAULT_KEYLENGTH];
     byte blowfishKey[BLOWFISH_DEFAULT_KEYLENGTH];
 
-    // IV для кожного алгоритму
+    // IV for each algorithm
     byte aesIV[AES::BLOCKSIZE];
     byte desIV[DES::BLOCKSIZE];
     byte blowfishIV[Blowfish::BLOCKSIZE];
 
-    // Додаткові IV для різних режимів AES
+    // Additional IVs for different AES modes
     byte aesCBCIV[AES::BLOCKSIZE];
     byte aesCTRIV[AES::BLOCKSIZE];
     byte aesGCMIV[AES::BLOCKSIZE];
@@ -363,69 +360,65 @@ private:
         return result;
     }
 };
-// Приклад використання
+
 int main() {
-    setlocale(LC_ALL, "ukr");
     try {
         Encryptor encryptor;
-        string message = "Тестове повідомлення для шифрування";
+        string message = "Test message for encryption";
 
-        cout << "Оригінальне повідомлення: " << message << endl << endl;
+        cout << "Original message: " << message << endl << endl;
 
-        // Тестування різних режимів AES
-        cout << "=== AES Шифрування ===" << endl;
+        // Testing different AES modes
+        cout << "=== AES Encryption ===" << endl;
         string aesEncryptedCBC = encryptor.encryptSymmetric(message, SymmetricAlgorithm::AES, AESMode::CBC);
-        cout << "AES CBC режим - зашифроване: " << aesEncryptedCBC << endl;
+        cout << "AES CBC mode - encrypted: " << aesEncryptedCBC << endl;
         string aesDecryptedCBC = encryptor.decryptSymmetric(aesEncryptedCBC, SymmetricAlgorithm::AES, AESMode::CBC);
-        cout << "AES CBC режим - дешифроване: " << aesDecryptedCBC << endl;
+        cout << "AES CBC mode - decrypted: " << aesDecryptedCBC << endl;
 
         string aesEncryptedCTR = encryptor.encryptSymmetric(message, SymmetricAlgorithm::AES, AESMode::CTR);
-        cout << "AES CTR режим - зашифроване: " << aesEncryptedCTR << endl;
+        cout << "AES CTR mode - encrypted: " << aesEncryptedCTR << endl;
         string aesDecryptedCTR = encryptor.decryptSymmetric(aesEncryptedCTR, SymmetricAlgorithm::AES, AESMode::CTR);
-        cout << "AES CTR режим - дешифроване: " << aesDecryptedCTR << endl;
+        cout << "AES CTR mode - decrypted: " << aesDecryptedCTR << endl;
 
-        // Тестування DES
-        cout << "\n=== DES Шифрування ===" << endl;
+        // Testing DES
+        cout << "\n=== DES Encryption ===" << endl;
         string desEncrypted = encryptor.encryptSymmetric(message, SymmetricAlgorithm::DES);
-        cout << "DES - зашифроване: " << desEncrypted << endl;
+        cout << "DES - encrypted: " << desEncrypted << endl;
         string desDecrypted = encryptor.decryptSymmetric(desEncrypted, SymmetricAlgorithm::DES);
-        cout << "DES - дешифроване: " << desDecrypted << endl;
+        cout << "DES - decrypted: " << desDecrypted << endl;
 
-        // Тестування Blowfish
-        cout << "\n=== Blowfish Шифрування ===" << endl;
+        // Testing Blowfish
+        cout << "\n=== Blowfish Encryption ===" << endl;
         string blowfishEncrypted = encryptor.encryptSymmetric(message, SymmetricAlgorithm::BLOWFISH);
-        cout << "Blowfish - зашифроване: " << blowfishEncrypted << endl;
+        cout << "Blowfish - encrypted: " << blowfishEncrypted << endl;
         string blowfishDecrypted = encryptor.decryptSymmetric(blowfishEncrypted, SymmetricAlgorithm::BLOWFISH);
-        cout << "Blowfish - дешифроване: " << blowfishDecrypted << endl;
+        cout << "Blowfish - decrypted: " << blowfishDecrypted << endl;
 
-        // Тестування хешування
-        cout << "\n=== Хешування ===" << endl;
+        // Hashing testing
+        cout << "\n=== Hashing ===" << endl;
         string sha256Hash = encryptor.calculateHash(message, HashAlgorithm::SHA256);
-        cout << "SHA-256 хеш: " << sha256Hash << endl;
+        cout << "SHA-256 hash: " << sha256Hash << endl;
 
         string sha3Hash = encryptor.calculateHash(message, HashAlgorithm::SHA3_256);
-        cout << "SHA3-256 хеш: " << sha3Hash << endl;
+        cout << "SHA3-256 hash: " << sha3Hash << endl;
 
-        // Тестування RSA
-        cout << "\n=== RSA Шифрування ===" << endl;
+        // Testing RSA
+        cout << "\n=== RSA Encryption ===" << endl;
         string rsaEncrypted = encryptor.encryptRSA(message);
-        cout << "RSA - зашифроване: " << rsaEncrypted << endl;
+        cout << "RSA - encrypted: " << rsaEncrypted << endl;
         string rsaDecrypted = encryptor.decryptRSA(rsaEncrypted);
-        cout << "RSA - дешифроване: " << rsaDecrypted << endl;
+        cout << "RSA - decrypted: " << rsaDecrypted << endl;
 
-        // Тестування цифрового підпису
-        cout << "\n=== Цифровий підпис ===" << endl;
+        // Testing a digital signature
+        cout << "\n=== Digital signature ===" << endl;
         string signature = encryptor.signMessage(message);
         bool isValid = encryptor.verifySignature(message, signature);
-        cout << "Перевірка підпису: " << (isValid ? "Успішно" : "Помилка") << endl;
+        cout << "Signature verification: " << (isValid ? "Success" : "error") << endl;
 
 
     }
     catch (const Exception& e) {
-        cerr << "Crypto++ помилка: " << e.what() << endl;
-    }
-    catch (const exception& e) {
-        cerr << "Стандартна помилка: " << e.what() << endl;
+        cerr << "Crypto++ error: " << e.what() << endl;
     }
 
     return 0;
