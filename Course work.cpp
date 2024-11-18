@@ -445,7 +445,7 @@ private:
             if (newIV == nullptr || newIVLength != AES::BLOCKSIZE) {
                 throw std::invalid_argument("Invalid AES IV length");
             }
-            memcpy(desIV, newIV, newIVLength);
+            memcpy(aesCBCIV, newIV, newIVLength);
         }
 
         void setAESCTRIV(const byte* newIV, size_t newIVLength) {
