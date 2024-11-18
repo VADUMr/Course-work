@@ -19,7 +19,6 @@
 #include <base64.h>
 #include <dsa.h>
 #include <hex.h>
-#include <osrng.h>
 
 using namespace std;
 using namespace CryptoPP;
@@ -359,6 +358,126 @@ private:
         );
         return result;
     }
+    public:
+        
+        const byte* getAESKey() const {
+            return aesKey;
+        }
+
+        const byte* getDESKey() const {
+            return desKey;
+        }
+
+        const byte* getBlowfishKey() const {
+            return blowfishKey;
+        }
+
+        // Getters for IVs
+        const byte* getAESIV() const {
+            return aesIV;
+        }
+
+        const byte* getDESIV() const {
+            return desIV;
+        }
+
+        const byte* getBlowfishIV() const {
+            return blowfishIV;
+        }
+
+        const byte* getAESCBCIV() const {
+            return aesCBCIV;
+        }
+
+        const byte* getAESCTRIV() const {
+            return aesCTRIV;
+        }
+
+        const byte* getAESGCMIV() const {
+            return aesGCMIV;
+        }
+
+        // Setters for keys (with validation)
+        void setAESKey(const byte* newKey) {
+            if (newKey == nullptr || strlen((const char*)newKey) != AES::DEFAULT_KEYLENGTH) {
+                throw std::invalid_argument("Invalid AES key length");
+            }
+            memcpy(aesKey, newKey, AES::DEFAULT_KEYLENGTH);
+        }
+
+        void setDESKey(const byte* newKey, size_t newKeyLength) {
+            if (newKey == nullptr || newKeyLength != DES::DEFAULT_KEYLENGTH) {
+                throw std::invalid_argument("Invalid DES key length");
+            }
+            memcpy(desKey, newKey, newKeyLength);
+        }
+
+        void setBlowfishKey(const byte* newKey, size_t newKeyLength) {
+            if (newKey == nullptr || newKeyLength != BLOWFISH_DEFAULT_KEYLENGTH) {
+                throw std::invalid_argument("Invalid Blowfish key length");
+            }
+            memcpy(blowfishKey, newKey, newKeyLength);
+        }
+
+        // Setters for IVs (with validation)
+        void setAESIV(const byte* newIV) {
+            if (newIV == nullptr || strlen((const char*)newIV) != AES::BLOCKSIZE) {
+                throw std::invalid_argument("Invalid AES IV length");
+            }
+            memcpy(aesIV, newIV, AES::BLOCKSIZE);
+        }
+
+        void setDESIV(const byte* newIV, size_t newIVLength) {
+            if (newIV == nullptr || newIVLength != DES::BLOCKSIZE) {
+                throw std::invalid_argument("Invalid DES IV length");
+            }
+            memcpy(desIV, newIV, newIVLength);
+        }
+
+        void setBlowfishIV(const byte* newIV, size_t newIVLength) {
+            if (newIV == nullptr || newIVLength != Blowfish::BLOCKSIZE) {
+                throw std::invalid_argument("Invalid Blowfish IV length");
+            }
+            memcpy(blowfishIV, newIV, newIVLength);
+        }
+
+        void setAESCBCIV(const byte* newIV, size_t newIVLength) {
+            if (newIV == nullptr || newIVLength != AES::BLOCKSIZE) {
+                throw std::invalid_argument("Invalid AES IV length");
+            }
+            memcpy(desIV, newIV, newIVLength);
+        }
+
+        void setAESCTRIV(const byte* newIV, size_t newIVLength) {
+            if (newIV == nullptr || newIVLength != AES::BLOCKSIZE) {
+                throw std::invalid_argument("Invalid AES CTR IV length");
+            }
+            memcpy(aesCTRIV, newIV, newIVLength);
+        }
+
+        void setAESGCMIV(const byte* newIV, size_t newIVLength) {
+            if (newIV == nullptr || newIVLength != AES::BLOCKSIZE) {
+                throw std::invalid_argument("Invalid AES GCM IV length");
+            }
+            memcpy(aesGCMIV, newIV, newIVLength);
+        }
+
+        // Getters for RSA and DSA keys (consider security implications)
+        const RSA::PublicKey& getRSAPublicKey() const {
+            return rsaPublicKey;
+        }
+
+        const RSA::PrivateKey& getRSAPrivateKey() const {
+            return rsaPrivateKey;
+        }
+
+        const DSA::PublicKey& getDSAPublicKey() const {
+            return dsaPublicKey;
+        }
+
+        const DSA::PrivateKey& getDSAPrivateKey() const {
+            return dsaPrivateKey;
+        }
 };
 
 int main() {
