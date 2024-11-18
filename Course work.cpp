@@ -19,6 +19,7 @@
 #include <base64.h>
 #include <dsa.h>
 #include <hex.h>
+#include <pem.h>
 
 using namespace std;
 using namespace CryptoPP;
@@ -358,6 +359,19 @@ private:
         );
         return result;
     }
+
+    string wrapPEMFormat(const string& encodedKey, const string& keyType) const {
+        std::stringstream ss;
+        ss << "-----BEGIN " << keyType << "-----\n";
+
+        // Insert line breaks every 64 characters
+        for (size_t i = 0; i < encodedKey.length(); i += 64) {
+            ss << encodedKey.substr(i, 64) << "\n";
+        }
+
+        ss << "-----END " << keyType << "-----\n";
+        return ss.str();
+    }
     public:
         
         const byte* getAESKey() const {
@@ -478,6 +492,58 @@ private:
         const DSA::PrivateKey& getDSAPrivateKey() const {
             return dsaPrivateKey;
         }
+
+        string getRSAPublicKeyPEM() const {
+            string pemKey;
+            StringSink sink(pemKey);
+            HexEncoder encoder(new Redirector(sink));
+
+            // Save the public key to the encoder
+            rsaPublicKey.Save(encoder);
+            encoder.MessageEnd();
+
+            // Wrap in PEM format
+            return wrapPEMFormat(pemKey, "RSA PUBLIC KEY");
+        }
+
+        string getRSAPrivateKeyPEM() const {
+            string pemKey;
+            StringSink sink(pemKey);
+            HexEncoder encoder(new Redirector(sink));
+
+            // Save the private key to the encoder
+            rsaPrivateKey.Save(encoder);
+            encoder.MessageEnd();
+
+            // Wrap in PEM format
+            return wrapPEMFormat(pemKey, "RSA PRIVATE KEY");
+        }
+
+        string getDSAPublicKeyPEM() const {
+            string pemKey;
+            StringSink sink(pemKey);
+            HexEncoder encoder(new Redirector(sink));
+
+            // Save the public key to the encoder
+            dsaPublicKey.Save(encoder);
+            encoder.MessageEnd();
+
+            // Wrap in PEM format
+            return wrapPEMFormat(pemKey, "DSA PUBLIC KEY");
+        }
+
+        string getDSAPrivateKeyPEM() const {
+            string pemKey;
+            StringSink sink(pemKey);
+            HexEncoder encoder(new Redirector(sink));
+
+            // Save the private key to the encoder
+            dsaPrivateKey.Save(encoder);
+            encoder.MessageEnd();
+
+            // Wrap in PEM format
+            return wrapPEMFormat(pemKey, "DSA PRIVATE KEY");
+        }
 };
 
 int main() {
@@ -534,6 +600,22 @@ int main() {
         bool isValid = encryptor.verifySignature(message, signature);
         cout << "Signature verification: " << (isValid ? "Success" : "error") << endl;
 
+        cout << "RSA Public Key (PEM):\n" << encryptor.getRSAPublicKeyPEM() << endl;
+        cout << "RSA Private Key (PEM):\n" << encryptor.getRSAPrivateKeyPEM() << endl;
+
+        cout << "DSA Public Key (PEM):\n" << encryptor.getDSAPublicKeyPEM() << endl;
+        cout << "DSA Private Key (PEM):\n" << encryptor.getDSAPrivateKeyPEM() << endl;
+        
+        const RSA::PublicKey& rsaPublicKey = encryptor.getRSAPublicKey();
+        cout << "RSA Public Key:" << endl;
+        cout << "Modulus: " << rsaPublicKey.GetModulus() << endl;
+        cout << "Public Exponent: " << rsaPublicKey.GetPublicExponent() << endl;
+
+        // Виведення RSA приватного ключа
+        const RSA::PrivateKey& rsaPrivateKey = encryptor.getRSAPrivateKey();
+        cout << "\nRSA Private Key:" << endl;
+        cout << "Modulus: " << rsaPrivateKey.GetModulus() << endl;
+        cout << "Private Exponent: " << rsaPrivateKey.GetPrivateExponent() << endl;
 
     }
     catch (const Exception& e) {
