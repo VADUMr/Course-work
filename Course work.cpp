@@ -1,3 +1,4 @@
+﻿#include <windows.h>
 #include <iostream>
 #include <string>
 #include <map>
@@ -27,8 +28,7 @@ using namespace CryptoPP;
 // Listing for AES operating modes
 enum class AESMode {
     CBC,
-    CTR,
-    GCM
+    CTR
 };
 
 // Enumeration for hashing algorithms
@@ -62,7 +62,6 @@ public:
         // Generation of additional IVs for different AES modes
         rng.GenerateBlock(aesCBCIV, AES::BLOCKSIZE);
         rng.GenerateBlock(aesCTRIV, AES::BLOCKSIZE);
-        rng.GenerateBlock(aesGCMIV, AES::BLOCKSIZE);
 
         // RSA key generation
         RSA::PrivateKey privateKey;
@@ -149,7 +148,6 @@ private:
     // Additional IVs for different AES modes
     byte aesCBCIV[AES::BLOCKSIZE];
     byte aesCTRIV[AES::BLOCKSIZE];
-    byte aesGCMIV[AES::BLOCKSIZE];
 
     RSA::PublicKey rsaPublicKey;
     RSA::PrivateKey rsaPrivateKey;
@@ -166,7 +164,8 @@ private:
             encryptor.SetKeyWithIV(aesKey, sizeof(aesKey), aesCBCIV);
             StringSource(plaintext, true,
                 new StreamTransformationFilter(encryptor,
-                    new StringSink(ciphertext)
+                    new StringSink(ciphertext),
+                    StreamTransformationFilter::PKCS_PADDING // Додаємо паддинг
                 )
             );
             break;
@@ -176,16 +175,6 @@ private:
             encryptor.SetKeyWithIV(aesKey, sizeof(aesKey), aesCTRIV);
             StringSource(plaintext, true,
                 new StreamTransformationFilter(encryptor,
-                    new StringSink(ciphertext)
-                )
-            );
-            break;
-        }
-        case AESMode::GCM: {
-            GCM<AES>::Encryption encryptor;
-            encryptor.SetKeyWithIV(aesKey, sizeof(aesKey), aesGCMIV, sizeof(aesGCMIV));
-            StringSource(plaintext, true,
-                new AuthenticatedEncryptionFilter(encryptor,
                     new StringSink(ciphertext)
                 )
             );
@@ -204,7 +193,8 @@ private:
             decryptor.SetKeyWithIV(aesKey, sizeof(aesKey), aesCBCIV);
             StringSource(ciphertext, true,
                 new StreamTransformationFilter(decryptor,
-                    new StringSink(decryptedtext)
+                    new StringSink(decryptedtext),
+                    StreamTransformationFilter::PKCS_PADDING // Видаляємо паддинг при дешифруванні
                 )
             );
             break;
@@ -219,19 +209,10 @@ private:
             );
             break;
         }
-        case AESMode::GCM: {
-            GCM<AES>::Decryption decryptor;
-            decryptor.SetKeyWithIV(aesKey, sizeof(aesKey), aesGCMIV, sizeof(aesGCMIV));
-            StringSource(ciphertext, true,
-                new AuthenticatedDecryptionFilter(decryptor,
-                    new StringSink(decryptedtext)
-                )
-            );
-            break;
-        }
         }
         return decryptedtext;
     }
+
 
     string encryptDES(const string& plaintext) {
         string ciphertext;
@@ -407,10 +388,6 @@ private:
             return aesCTRIV;
         }
 
-        const byte* getAESGCMIV() const {
-            return aesGCMIV;
-        }
-
         // Setters for keys (with validation)
         void setAESKey(const byte* newKey) {
             if (newKey == nullptr || strlen((const char*)newKey) != AES::DEFAULT_KEYLENGTH) {
@@ -467,13 +444,6 @@ private:
                 throw std::invalid_argument("Invalid AES CTR IV length");
             }
             memcpy(aesCTRIV, newIV, newIVLength);
-        }
-
-        void setAESGCMIV(const byte* newIV, size_t newIVLength) {
-            if (newIV == nullptr || newIVLength != AES::BLOCKSIZE) {
-                throw std::invalid_argument("Invalid AES GCM IV length");
-            }
-            memcpy(aesGCMIV, newIV, newIVLength);
         }
 
         // Getters for RSA and DSA keys (consider security implications)
@@ -544,82 +514,397 @@ private:
             // Wrap in PEM format
             return wrapPEMFormat(pemKey, "DSA PRIVATE KEY");
         }
+
+        void setRSAPublicKeyFromHex(const string& hexKey) {
+            try {
+                string decodedKey;
+                // Decode the hex string directly
+                StringSource ss(hexKey, true,
+                    new HexDecoder(
+                        new StringSink(decodedKey)
+                    )
+                );
+
+                // Load the decoded key into a ByteQueue
+                ByteQueue queue;
+                queue.Put((const byte*)decodedKey.data(), decodedKey.size());
+                queue.MessageEnd();
+
+                // Load the key
+                rsaPublicKey.Load(queue);
+
+                // Validate the key
+                AutoSeededRandomPool rng;
+                if (!rsaPublicKey.Validate(rng, 3)) {
+                    throw runtime_error("Invalid RSA public key");
+                }
+            }
+            catch (const Exception& e) {
+                throw runtime_error(string("Error setting RSA public key: ") + e.what());
+            }
+        }
+
+        void setRSAPrivateKeyFromHex(const string& hexKey) {
+            try {
+                string decodedKey;
+                // Decode the hex string directly
+                StringSource ss(hexKey, true,
+                    new HexDecoder(
+                        new StringSink(decodedKey)
+                    )
+                );
+
+                // Load the decoded key into a ByteQueue
+                ByteQueue queue;
+                queue.Put((const byte*)decodedKey.data(), decodedKey.size());
+                queue.MessageEnd();
+
+                // Load the key
+                rsaPrivateKey.Load(queue);
+
+                // Validate the key
+                AutoSeededRandomPool rng;
+                if (!rsaPrivateKey.Validate(rng, 3)) {
+                    throw runtime_error("Invalid RSA private key");
+                }
+            }
+            catch (const Exception& e) {
+                throw runtime_error(string("Error setting RSA private key: ") + e.what());
+            }
+        }
 };
 
-int main() {
-    try {
-        Encryptor encryptor;
-        string message = "Test message for encryption";
+enum elements_id {
+    button_encrypt = 1,
+    button_decrypt,
+    edit_input,
+    edit_output,
+    combo_algorithm,
+    combo_mode,
+    combo_switch,
+    combo_additional,
+    edit_input_key,
+    button_get_set_key
+};
 
-        cout << "Original message: " << message << endl << endl;
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    static HWND HWND_button_encrypt, HWND_button_decrypt, HWND_edit_input,
+        HWND_edit_output, HWND_combo_algorithm, HWND_combo_mode,
+        HWND_edit_input_key, HWND_combo_additional, HWND_combo_switch, HWND_button_get_set_key;
+    static Encryptor encryptor;
 
-        // Testing different AES modes
-        cout << "=== AES Encryption ===" << endl;
-        string aesEncryptedCBC = encryptor.encryptSymmetric(message, SymmetricAlgorithm::AES, AESMode::CBC);
-        cout << "AES CBC mode - encrypted: " << aesEncryptedCBC << endl;
-        string aesDecryptedCBC = encryptor.decryptSymmetric(aesEncryptedCBC, SymmetricAlgorithm::AES, AESMode::CBC);
-        cout << "AES CBC mode - decrypted: " << aesDecryptedCBC << endl;
-
-        string aesEncryptedCTR = encryptor.encryptSymmetric(message, SymmetricAlgorithm::AES, AESMode::CTR);
-        cout << "AES CTR mode - encrypted: " << aesEncryptedCTR << endl;
-        string aesDecryptedCTR = encryptor.decryptSymmetric(aesEncryptedCTR, SymmetricAlgorithm::AES, AESMode::CTR);
-        cout << "AES CTR mode - decrypted: " << aesDecryptedCTR << endl;
-
-        // Testing DES
-        cout << "\n=== DES Encryption ===" << endl;
-        string desEncrypted = encryptor.encryptSymmetric(message, SymmetricAlgorithm::DES);
-        cout << "DES - encrypted: " << desEncrypted << endl;
-        string desDecrypted = encryptor.decryptSymmetric(desEncrypted, SymmetricAlgorithm::DES);
-        cout << "DES - decrypted: " << desDecrypted << endl;
-
-        // Testing Blowfish
-        cout << "\n=== Blowfish Encryption ===" << endl;
-        string blowfishEncrypted = encryptor.encryptSymmetric(message, SymmetricAlgorithm::BLOWFISH);
-        cout << "Blowfish - encrypted: " << blowfishEncrypted << endl;
-        string blowfishDecrypted = encryptor.decryptSymmetric(blowfishEncrypted, SymmetricAlgorithm::BLOWFISH);
-        cout << "Blowfish - decrypted: " << blowfishDecrypted << endl;
-
-        // Hashing testing
-        cout << "\n=== Hashing ===" << endl;
-        string sha256Hash = encryptor.calculateHash(message, HashAlgorithm::SHA256);
-        cout << "SHA-256 hash: " << sha256Hash << endl;
-
-        string sha3Hash = encryptor.calculateHash(message, HashAlgorithm::SHA3_256);
-        cout << "SHA3-256 hash: " << sha3Hash << endl;
-
-        // Testing RSA
-        cout << "\n=== RSA Encryption ===" << endl;
-        string rsaEncrypted = encryptor.encryptRSA(message);
-        cout << "RSA - encrypted: " << rsaEncrypted << endl;
-        string rsaDecrypted = encryptor.decryptRSA(rsaEncrypted);
-        cout << "RSA - decrypted: " << rsaDecrypted << endl;
-
-        // Testing a digital signature
-        cout << "\n=== Digital signature ===" << endl;
-        string signature = encryptor.signMessage(message);
-        bool isValid = encryptor.verifySignature(message, signature);
-        cout << "Signature verification: " << (isValid ? "Success" : "error") << endl;
-
-        cout << "RSA Public Key (PEM):\n" << encryptor.getRSAPublicKeyPEM() << endl;
-        cout << "RSA Private Key (PEM):\n" << encryptor.getRSAPrivateKeyPEM() << endl;
-
-        cout << "DSA Public Key (PEM):\n" << encryptor.getDSAPublicKeyPEM() << endl;
-        cout << "DSA Private Key (PEM):\n" << encryptor.getDSAPrivateKeyPEM() << endl;
+    switch (uMsg) {
+    case WM_CREATE: {
         
-        const RSA::PublicKey& rsaPublicKey = encryptor.getRSAPublicKey();
-        cout << "RSA Public Key:" << endl;
-        cout << "Modulus: " << rsaPublicKey.GetModulus() << endl;
-        cout << "Public Exponent: " << rsaPublicKey.GetPublicExponent() << endl;
+        HWND_edit_input = CreateWindowW(L"edit", L"Введіть повідомлення яке хочете зашифрувати",
+            WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
+            10, 10, 600, 200, hwnd, (HMENU)edit_input, NULL, NULL);
 
-        // ��������� RSA ���������� �����
-        const RSA::PrivateKey& rsaPrivateKey = encryptor.getRSAPrivateKey();
-        cout << "\nRSA Private Key:" << endl;
-        cout << "Modulus: " << rsaPrivateKey.GetModulus() << endl;
-        cout << "Private Exponent: " << rsaPrivateKey.GetPrivateExponent() << endl;
+        HWND_combo_algorithm = CreateWindowW(L"ComboBox", L"",
+            CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE,
+            10, 220, 200, 200, hwnd, (HMENU)combo_algorithm, NULL, NULL);
 
+        HWND_combo_mode = CreateWindowW(L"ComboBox", L"",
+            CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE,
+            220, 220, 200, 200, hwnd, (HMENU)combo_mode, NULL, NULL);
+
+        HWND_button_encrypt = CreateWindowW(L"button", L"Encrypt",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            10, 450, 150, 50, hwnd, (HMENU)button_encrypt, NULL, NULL);
+
+        HWND_button_decrypt = CreateWindowW(L"button", L"Decrypt",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            170, 450, 150, 50, hwnd, (HMENU)button_decrypt, NULL, NULL);
+
+        HWND_edit_output = CreateWindowW(L"edit", L"Тут виведеться зашифроване повідомлення у Hex форматі",
+            WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
+            650, 10, 700, 200, hwnd, (HMENU)edit_output, NULL, NULL);
+
+        HWND_combo_switch = CreateWindowW(L"ComboBox", L"",
+            CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE,
+            500, 220, 200, 200, hwnd, (HMENU)combo_switch, NULL, NULL);
+
+        HWND_combo_additional = CreateWindowW(L"ComboBox", L"",
+            CBS_DROPDOWNLIST | WS_CHILD | WS_VISIBLE,
+            500, 300, 200, 400, hwnd, (HMENU)combo_additional, NULL, NULL);
+
+        HWND_edit_input_key = CreateWindowW(L"edit", L"Це вікно для управління ключами для шифрування",
+            WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL,
+            730, 220, 650, 350, hwnd, (HMENU)edit_input_key, NULL, NULL);
+
+        HWND_button_get_set_key = CreateWindowW(L"button", L"Get/Set Key",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            330, 450, 150, 50, hwnd, (HMENU)button_get_set_key, NULL, NULL);
+
+        SendMessageW(HWND_combo_switch, CB_ADDSTRING, 0, (LPARAM)L"GET");
+        SendMessageW(HWND_combo_switch, CB_ADDSTRING, 0, (LPARAM)L"SET");
+        SendMessageW(HWND_combo_switch, CB_SETCURSEL, 0, 0);
+
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"aesKey");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"desKey");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"blowfishKey");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"aesIV");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"desIV");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"blowfishIV");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"aesCBCIV");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"aesCTRIV");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"RSA_Private");
+        SendMessageW(HWND_combo_additional, CB_ADDSTRING, 0, (LPARAM)L"RSA_Public");
+        SendMessageW(HWND_combo_additional, CB_SETCURSEL, 0, 0);
+
+        SendMessageW(HWND_combo_algorithm, CB_ADDSTRING, 0, (LPARAM)L"AES");
+        SendMessageW(HWND_combo_algorithm, CB_ADDSTRING, 0, (LPARAM)L"DES");
+        SendMessageW(HWND_combo_algorithm, CB_ADDSTRING, 0, (LPARAM)L"Blowfish");
+        SendMessageW(HWND_combo_algorithm, CB_ADDSTRING, 0, (LPARAM)L"RSA");
+        SendMessageW(HWND_combo_algorithm, CB_SETCURSEL, 0, 0);
+
+        SendMessageW(HWND_combo_mode, CB_ADDSTRING, 0, (LPARAM)L"CBC");
+        SendMessageW(HWND_combo_mode, CB_ADDSTRING, 0, (LPARAM)L"CTR");
+        SendMessageW(HWND_combo_mode, CB_SETCURSEL, 0, 0);
+        break;
     }
-    catch (const Exception& e) {
-        cerr << "Crypto++ error: " << e.what() << endl;
+    case WM_COMMAND: {
+        if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == combo_algorithm) {
+            // Get selected index in algorithm combo box
+            int index = SendMessageW(HWND_combo_algorithm, CB_GETCURSEL, 0, 0);
+
+            // If "AES" is selected, show the mode combo box
+            if (index == 0) { // AES is at index 0
+                ShowWindow(HWND_combo_mode, SW_SHOW);
+            }
+            else {
+                // Hide the mode combo box for other algorithms
+                ShowWindow(HWND_combo_mode, SW_HIDE);
+            }
+        }
+        if (LOWORD(wParam) == button_get_set_key) {
+            int algIndex = SendMessageW(HWND_combo_switch, CB_GETCURSEL, 0, 0);
+            int algorithmType = SendMessageW(HWND_combo_additional, CB_GETCURSEL, 0, 0);
+
+            if (algIndex == 1) {  // "SET"
+                // Отримання тексту з поля введення
+                int textLength = GetWindowTextLengthW(HWND_edit_input_key);
+                std::wstring inputText(textLength + 1, L'\0');
+                GetWindowTextW(HWND_edit_input_key, &inputText[0], textLength + 1);
+
+                // Конвертація з UTF-16 в UTF-8
+                std::string inputStr;
+                int utf8Length = WideCharToMultiByte(CP_UTF8, 0, inputText.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                if (utf8Length > 0) {
+                    std::vector<char> utf8Str(utf8Length);
+                    WideCharToMultiByte(CP_UTF8, 0, inputText.c_str(), -1, utf8Str.data(), utf8Length, nullptr, nullptr);
+                    inputStr = std::string(utf8Str.data());
+                }
+
+                if (!inputStr.empty()) {
+
+                    std::string decodedInput;
+                    StringSource(inputStr, true,
+                        new HexDecoder(
+                            new StringSink(decodedInput)
+                        )
+                    );
+                    switch (algorithmType) {
+                    case 0:  // aesKey
+                        encryptor.setAESKey((const byte*)decodedInput.c_str());
+                        break;
+                    case 1:  // desKey
+                        encryptor.setDESKey((const byte*)decodedInput.c_str(), decodedInput.size());
+                        break;
+                    case 2:  // blowfishKey
+                        encryptor.setBlowfishKey((const byte*)decodedInput.c_str(), decodedInput.size());
+                        break;
+                    case 3:  // aesIV
+                        encryptor.setAESIV((const byte*)decodedInput.c_str());
+                        break;
+                    case 4:  // desIV
+                        encryptor.setDESIV((const byte*)decodedInput.c_str(), decodedInput.size());
+                        break;
+                    case 5:  // blowfishIV
+                        encryptor.setBlowfishIV((const byte*)decodedInput.c_str(), decodedInput.size());
+                        break;
+                    case 6:  // aesCBCIV
+                        encryptor.setAESCBCIV((const byte*)decodedInput.c_str(), decodedInput.size());
+                        break;
+                    case 7:  // aesCTRIV
+                        encryptor.setAESCTRIV((const byte*)decodedInput.c_str(), decodedInput.size());
+                        break;
+                    case 8:  // RSA_Private_key
+                        encryptor.setRSAPrivateKeyFromHex(decodedInput.c_str());
+                        break;
+                    case 9:  // RSA_Public_key
+                        encryptor.setRSAPublicKeyFromHex(decodedInput.c_str());
+                        break;
+                    }
+                }
+            }
+            else if (algIndex == 0) {  // "GET"
+                std::string result;
+
+                switch (algorithmType) {
+                case 0:  // aesKey
+                    result = std::string((char*)encryptor.getAESKey(), AES::DEFAULT_KEYLENGTH);
+                    break;
+                case 1:  // desKey
+                    result = std::string((char*)encryptor.getDESKey(), DES::DEFAULT_KEYLENGTH);
+                    break;
+                case 2:  // blowfishKey
+                    result = std::string((char*)encryptor.getBlowfishKey(), 32);
+                    break;
+                case 3:  // aesIV
+                    result = std::string((char*)encryptor.getAESIV(), AES::BLOCKSIZE);
+                    break;
+                case 4:  // desIV
+                    result = std::string((char*)encryptor.getDESIV(), DES::BLOCKSIZE);
+                    break;
+                case 5:  // blowfishIV
+                    result = std::string((char*)encryptor.getBlowfishIV(), Blowfish::BLOCKSIZE);
+                    break;
+                case 6:  // aesCBCIV
+                    result = std::string((char*)encryptor.getAESCBCIV(), AES::BLOCKSIZE);
+                    break;
+                case 7:  // aesCTRIV
+                    result = std::string((char*)encryptor.getAESCTRIV(), AES::BLOCKSIZE);
+                    break;
+                case 8:  // RSA_Private_key
+                    result = std::string(encryptor.getRSAPrivateKeyPEM());
+                    break;
+                case 9:  // RSA_Public_key
+                    result = std::string(encryptor.getRSAPublicKeyPEM());
+                    break;
+                }
+
+                std::string hexResult;
+                StringSource(result, true,
+                    new HexEncoder(
+                        new StringSink(hexResult)
+                    )
+                );
+
+                // Конвертація hex string в wide string для відображення
+                std::wstring wResult(hexResult.begin(), hexResult.end());
+                SetWindowTextW(HWND_edit_input_key, wResult.c_str());
+            }
+        }
+        if (LOWORD(wParam) == button_encrypt || LOWORD(wParam) == button_decrypt) {
+            // Отримання тексту з вхідного поля
+            int textLength = GetWindowTextLengthW(HWND_edit_input);
+            std::wstring inputText(textLength + 1, L'\0');
+            GetWindowTextW(HWND_edit_input, &inputText[0], textLength + 1);
+
+            //Перетворення з UTF-16 (wstring) в UTF-8 (string)
+            std::string inputStr;
+            int utf8Length = WideCharToMultiByte(CP_UTF8, 0, inputText.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            if (utf8Length > 0) {
+                std::vector<char> utf8Str(utf8Length);
+                WideCharToMultiByte(CP_UTF8, 0, inputText.c_str(), -1, utf8Str.data(), utf8Length, nullptr, nullptr);
+                inputStr = std::string(utf8Str.data());
+            }
+
+            // Отримання вибраного алгоритму
+            int algIndex = SendMessageW(HWND_combo_algorithm, CB_GETCURSEL, 0, 0);
+
+            // Отримання вибраного режиму (для AES)
+            AESMode mode = AESMode::CBC;
+            if (algIndex == 0) { // AES
+                int modeIndex = SendMessageW(HWND_combo_mode, CB_GETCURSEL, 0, 0);
+                mode = (modeIndex == 0) ? AESMode::CBC : AESMode::CTR;
+            }
+
+            try {
+                std::string result;
+                if (LOWORD(wParam) == button_encrypt) {
+                    switch (algIndex) {
+                    case 0: // AES
+                    case 1: // DES
+                    case 2: // BLOWFISH
+                        result = encryptor.encryptSymmetric(inputStr, static_cast<SymmetricAlgorithm>(algIndex), mode);
+                        break;
+                    case 3: // RSA
+                        result = encryptor.encryptRSA(inputStr);
+                        break;
+                    }
+                    // Конвертація зашифрованих даних в hex для відображення
+                    std::string hexResult;
+                    StringSource(result, true,
+                        new HexEncoder(
+                            new StringSink(hexResult)
+                        )
+                    );
+
+                    // Конвертація hex string в wide string для відображення
+                    std::wstring wResult(hexResult.begin(), hexResult.end());
+                    SetWindowTextW(HWND_edit_output, wResult.c_str());
+                }
+                else {
+                    // Перед дешифруванням, конвертуємо hex назад у бінарні дані
+                    std::string decodedInput;
+                    StringSource(inputStr, true,
+                        new HexDecoder(
+                            new StringSink(decodedInput)
+                        )
+                    );
+
+                    switch (algIndex) {
+                    case 0: // AES
+                    case 1: // DES
+                    case 2: // BLOWFISH
+                        result = encryptor.decryptSymmetric(decodedInput, static_cast<SymmetricAlgorithm>(algIndex), mode);
+                        break;
+                    case 3: // RSA
+                        result = encryptor.decryptRSA(decodedInput);
+                        break;
+                    }
+                    // Після дешифрування, конвертуємо результат в wide string
+                    std::wstring wResult;
+                    int wideLength = MultiByteToWideChar(CP_UTF8, 0, result.c_str(), -1, nullptr, 0);
+                    if (wideLength > 0) {
+                        std::vector<wchar_t> wideStr(wideLength);
+                        MultiByteToWideChar(CP_UTF8, 0, result.c_str(), -1, wideStr.data(), wideLength);
+                        wResult = std::wstring(wideStr.data());
+                    }
+                    SetWindowTextW(HWND_edit_output, wResult.c_str());
+                }            
+            }
+            catch (const std::exception& e) {
+                // Обробка помилок
+                std::string errorMsg = "Error: ";
+                errorMsg += e.what();
+                std::wstring wErrorMsg(errorMsg.begin(), errorMsg.end());
+                SetWindowTextW(HWND_edit_output, wErrorMsg.c_str());
+            }
+        }
+        break;
+    }
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        break;
+    default:
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+    return 0;
+}
+
+int main() {
+   
+    WNDCLASSW wc;
+    memset(&wc, 0, sizeof(WNDCLASSA));
+    wc.lpfnWndProc = WindowProc;
+    wc.lpszClassName = L"EncryptionToolClass";
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    RegisterClassW(&wc);
+
+    HWND hwnd = CreateWindowW(L"EncryptionToolClass", L"Encryption Tool",
+        WS_OVERLAPPEDWINDOW, 0, 0, 1400, 700,
+        NULL, NULL, NULL, NULL);
+
+    ShowWindow(hwnd, SW_SHOWNORMAL);
+    UpdateWindow(hwnd);
+
+    MSG msg = {};
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
     return 0;
